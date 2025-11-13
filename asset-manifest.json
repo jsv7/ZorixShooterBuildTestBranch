@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/ZorixShooterBuild/static/css/main.009b6c54.css",
-    "main.js": "/ZorixShooterBuild/static/js/main.b8af3f85.js",
-    "static/js/453.fccf966c.chunk.js": "/ZorixShooterBuild/static/js/453.fccf966c.chunk.js",
-    "index.html": "/ZorixShooterBuild/index.html",
-    "main.009b6c54.css.map": "/ZorixShooterBuild/static/css/main.009b6c54.css.map",
-    "main.b8af3f85.js.map": "/ZorixShooterBuild/static/js/main.b8af3f85.js.map",
-    "453.fccf966c.chunk.js.map": "/ZorixShooterBuild/static/js/453.fccf966c.chunk.js.map"
+    "main.css": "/jsv7/ZorixShooterBuildTestBranch/static/css/main.009b6c54.css",
+    "main.js": "/jsv7/ZorixShooterBuildTestBranch/static/js/main.efef5fa7.js",
+    "static/js/453.ebfc429b.chunk.js": "/jsv7/ZorixShooterBuildTestBranch/static/js/453.ebfc429b.chunk.js",
+    "index.html": "/jsv7/ZorixShooterBuildTestBranch/index.html",
+    "main.009b6c54.css.map": "/jsv7/ZorixShooterBuildTestBranch/static/css/main.009b6c54.css.map",
+    "main.efef5fa7.js.map": "/jsv7/ZorixShooterBuildTestBranch/static/js/main.efef5fa7.js.map",
+    "453.ebfc429b.chunk.js.map": "/jsv7/ZorixShooterBuildTestBranch/static/js/453.ebfc429b.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.009b6c54.css",
-    "static/js/main.b8af3f85.js"
+    "static/js/main.efef5fa7.js"
   ]
 }
