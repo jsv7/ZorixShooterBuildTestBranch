@@ -1,37 +1,14 @@
-/*// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-    apiKey: "AIzaSyCSEXO8zsXHtF6_zcWMPZqHgjP1nokYftY",
-    authDomain: "zorixshooter.firebaseapp.com",
-    projectId: "zorixshooter",
-    storageBucket: "zorixshooter.firebasestorage.app",
-    messagingSenderId: "983540791855",
-    appId: "1:983540791855:web:d76a065a07319957ebe4da",
-    measurementId: "G-F1JQG1LN6F"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);*/
 import './App.css';
 import React, { Fragment, useState, useCallback, useEffect } from "react";
 import { Unity, useUnityContext } from "react-unity-webgl";
-import { useHapticFeedback } from '@vkruglikov/react-telegram-web-app';
-import { viewport, init, isTMA, initData } from "@telegram-apps/sdk";
 import { RotatingLines } from "react-loader-spinner";
 
 // Import Firebase
 import { initializeApp } from "firebase/app";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import { getAuth, signInAnonymously } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, collection, query, where, orderBy, limit, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
 
-// Firebase configuration - REPLACE WITH YOUR CONFIG
+// Firebase configuration
 const firebaseConfig = {
     apiKey: "AIzaSyCSEXO8zsXHtF6_zcWMPZqHgjP1nokYftY",
     authDomain: "zorixshooter.firebaseapp.com",
@@ -59,20 +36,11 @@ function Loader() {
     )
 }
 
-async function initTg() {
-    if (await isTMA()) {
-        init(); // init tg app
-    }
-}
-
-(async () => {
-    await initTg();
-})();
-
 function App() {
-    const [telegramDataSent, setTelegramDataSent] = useState(false);
+    const [readyToShow, setReadyToShow] = useState(false);
     const [currentUser, setCurrentUser] = useState(null);
     const [telegramData, setTelegramData] = useState(null);
+    const [statusMessage, setStatusMessage] = useState("Initializing...");
 
     const { unityProvider, sendMessage, addEventListener, removeEventListener, loadingProgression, isLoaded } = useUnityContext({
         loaderUrl: "Assets/WEBGL.loader.js",
@@ -81,36 +49,56 @@ function App() {
         codeUrl: "Assets/WEBGL.wasm.unityweb",
     });
 
-    const [impactOccurred, notificationOccurred, selectionChanged] = useHapticFeedback();
+    // Get Telegram data directly from window.Telegram
+    const getTelegramUserData = useCallback(() => {
+        try {
+            // Check if Telegram WebApp is available
+            if (window.Telegram && window.Telegram.WebApp) {
+                const tg = window.Telegram.WebApp;
 
-    function hapticSoft() {
-        notificationOccurred('success');
-    }
+                // Expand the WebApp
+                tg.expand();
 
-    function hapticMedium() {
-        notificationOccurred('error');
-    }
+                console.log("Telegram WebApp available:", tg);
+                console.log("InitDataUnsafe:", tg.initDataUnsafe);
 
-    const handleHapticSoft = useCallback(() => {
-        hapticSoft();
+                if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+                    const user = tg.initDataUnsafe.user;
+
+                    const userData = {
+                        id: user.id,
+                        username: user.username || "",
+                        first_name: user.first_name || "",
+                        last_name: user.last_name || "",
+                        photo_url: user.photo_url || ""
+                    };
+
+                    console.log("✅ Telegram user data retrieved:", userData);
+                    return userData;
+                }
+            }
+
+            console.log("⚠️ Telegram WebApp not available or no user data");
+            return null;
+        } catch (error) {
+            console.error("Error getting Telegram data:", error);
+            return null;
+        }
     }, []);
 
-    const handleHapticMedium = useCallback(() => {
-        hapticMedium();
-    }, []);
-
-    // Authenticate with Firebase and check user existence
+    // Authenticate with Firebase
     const authenticateWithFirebase = useCallback(async (telegramUserData) => {
         try {
-            console.log("Authenticating with Firebase...");
+            console.log("🔐 Authenticating with Firebase...");
+            setStatusMessage("Authenticating...");
 
             // Sign in anonymously
             const userCredential = await signInAnonymously(auth);
             const user = userCredential.user;
 
-            console.log("Firebase authentication successful:", user.uid);
+            console.log("✅ Firebase auth successful:", user.uid);
 
-            // Store telegram data in Firestore user document
+            // Check if user exists in Firestore
             const userRef = doc(db, "users", user.uid);
             const userSnap = await getDoc(userRef);
 
@@ -122,51 +110,52 @@ function App() {
             };
 
             if (userSnap.exists()) {
-                // User exists, get their data
                 const existingData = userSnap.data();
                 userData.username = existingData.username || "";
                 userData.discriminator = existingData.discriminator || "";
                 userData.isApproved = existingData.isApproved || false;
-
-                console.log("Existing user found:", userData);
+                console.log("✅ Existing user found:", userData);
             } else {
-                // New user - just mark them as authenticated, username will be created later
-                console.log("New user - needs to create username");
-            }
-
-            // Send authenticated user data to Unity
-            sendMessage("RegistrationUITelegram", "OnAuthenticationComplete", JSON.stringify(userData));
-
-            // Determine what panel to show
-            if (userData.username && userData.username !== "") {
-                if (userData.isApproved) {
-                    // Existing approved user - go to main menu
-                    sendMessage("RegistrationUITelegram", "LoadMainMenuFromReact", "");
-                } else {
-                    // Has username but not approved - show code panel
-                    sendMessage("RegistrationUITelegram", "ShowCodePanel", "");
-                }
-            } else {
-                // New user - show username panel
-                sendMessage("RegistrationUITelegram", "ShowUsernamePanel", "");
+                console.log("ℹ️ New user");
             }
 
             setCurrentUser(user);
+
+            // Send data to Unity
+            console.log("📤 Sending data to Unity...");
+            sendMessage("RegistrationUITelegram", "OnAuthenticationComplete", JSON.stringify(userData));
+
+            // Show appropriate panel
+            if (userData.username && userData.username !== "") {
+                if (userData.isApproved) {
+                    sendMessage("RegistrationUITelegram", "LoadMainMenuFromReact", "");
+                } else {
+                    sendMessage("RegistrationUITelegram", "ShowCodePanel", "");
+                }
+            } else {
+                sendMessage("RegistrationUITelegram", "ShowUsernamePanel", "");
+            }
+
+            setStatusMessage("Ready!");
+            console.log("✅ Authentication complete");
+
         } catch (error) {
-            console.error("Firebase authentication error:", error);
+            console.error("❌ Firebase authentication error:", error);
+            setStatusMessage(`Error: ${error.message}`);
         }
     }, [sendMessage]);
 
     // Create username in Firebase
     const createUsernameInFirebase = useCallback(async (username) => {
         if (!currentUser || !telegramData) {
-            console.error("No authenticated user or telegram data");
+            console.error("❌ No authenticated user or telegram data");
             sendMessage("RegistrationUITelegram", "OnUsernameCreationFailedFromReact", "Not authenticated");
             return;
         }
 
         try {
-            // Validate username
+            console.log("📝 Creating username:", username);
+
             if (!username || username.trim().length < 3 || username.trim().length > 16) {
                 sendMessage("RegistrationUITelegram", "OnUsernameCreationFailedFromReact", "Username must be 3-16 characters");
                 return;
@@ -174,18 +163,12 @@ function App() {
 
             const cleanUsername = username.trim();
 
-            // Query existing usernames to find the next available discriminator
+            // Find next available discriminator
             const usersRef = collection(db, "users");
-            const q = query(
-                usersRef,
-                where("username", "==", cleanUsername),
-                orderBy("discriminator", "desc"),
-                limit(1)
-            );
-
+            const q = query(usersRef, where("username", "==", cleanUsername), orderBy("discriminator", "desc"), limit(1));
             const querySnapshot = await getDocs(q);
-            let discriminator = "0001";
 
+            let discriminator = "0001";
             if (!querySnapshot.empty) {
                 const lastDoc = querySnapshot.docs[0];
                 const lastDiscriminator = lastDoc.data().discriminator;
@@ -200,7 +183,7 @@ function App() {
 
             // Create user document
             const userRef = doc(db, "users", currentUser.uid);
-            const userData = {
+            await setDoc(userRef, {
                 username: cleanUsername,
                 discriminator: discriminator,
                 fullUsername: fullUsername,
@@ -211,40 +194,37 @@ function App() {
                 isApproved: false,
                 createdAt: serverTimestamp(),
                 registrationDate: registrationDate
-            };
-
-            await setDoc(userRef, userData);
-
-            // Create username lookup document
-            const usernameRef = doc(db, "usernames", fullUsername);
-            await setDoc(usernameRef, {
-                userId: currentUser.uid
             });
 
-            console.log("Username created successfully:", fullUsername);
+            // Create username lookup
+            const usernameRef = doc(db, "usernames", fullUsername);
+            await setDoc(usernameRef, { userId: currentUser.uid });
 
-            // Send username data to Unity
-            const usernameData = {
+            console.log("✅ Username created:", fullUsername);
+
+            // Notify Unity
+            sendMessage("RegistrationUITelegram", "OnUsernameCreated", JSON.stringify({
                 username: cleanUsername,
                 discriminator: discriminator
-            };
-            sendMessage("RegistrationUITelegram", "OnUsernameCreated", JSON.stringify(usernameData));
+            }));
 
         } catch (error) {
-            console.error("Error creating username:", error);
-            sendMessage("RegistrationUITelegram", "OnUsernameCreationFailedFromReact", `Failed to create username: ${error.message}`);
+            console.error("❌ Error creating username:", error);
+            sendMessage("RegistrationUITelegram", "OnUsernameCreationFailedFromReact", `Failed: ${error.message}`);
         }
     }, [currentUser, telegramData, sendMessage]);
 
-    // Verify access code in Firebase
+    // Verify access code
     const verifyAccessCodeInFirebase = useCallback(async (code) => {
         if (!currentUser) {
-            console.error("No authenticated user");
+            console.error("❌ No authenticated user");
             sendMessage("RegistrationUITelegram", "OnCodeVerificationFailedFromReact", "Not authenticated");
             return;
         }
 
         try {
+            console.log("🔑 Verifying code:", code);
+
             if (!code || code.trim().length === 0) {
                 sendMessage("RegistrationUITelegram", "OnCodeVerificationFailedFromReact", "Code cannot be empty");
                 return;
@@ -252,37 +232,31 @@ function App() {
 
             const cleanCode = code.trim();
 
-            // Get the Codes document from SpecificData collection
+            // Get codes document
             const codesRef = doc(db, "SpecificData", "Codes");
             const codesSnap = await getDoc(codesRef);
 
             if (!codesSnap.exists()) {
-                sendMessage("RegistrationUITelegram", "OnCodeVerificationFailedFromReact", "Code verification system unavailable");
-                console.error("SpecificData/Codes document does not exist");
+                sendMessage("RegistrationUITelegram", "OnCodeVerificationFailedFromReact", "Code system unavailable");
                 return;
             }
 
             const codesData = codesSnap.data();
 
-            // Check if the entered code exists
             if (!(cleanCode in codesData)) {
-                sendMessage("RegistrationUITelegram", "OnCodeVerificationFailedFromReact", "Invalid access code");
+                sendMessage("RegistrationUITelegram", "OnCodeVerificationFailedFromReact", "Invalid code");
                 return;
             }
 
-            // Check if the code has been used
-            const isUsed = codesData[cleanCode];
-            if (isUsed) {
-                sendMessage("RegistrationUITelegram", "OnCodeVerificationFailedFromReact", "This code has already been used");
+            if (codesData[cleanCode]) {
+                sendMessage("RegistrationUITelegram", "OnCodeVerificationFailedFromReact", "Code already used");
                 return;
             }
 
-            // Code is valid and unused - Mark it as used
-            await updateDoc(codesRef, {
-                [cleanCode]: true
-            });
+            // Mark code as used
+            await updateDoc(codesRef, { [cleanCode]: true });
 
-            // Update user document with approval
+            // Update user
             const userRef = doc(db, "users", currentUser.uid);
             await updateDoc(userRef, {
                 isApproved: true,
@@ -290,22 +264,20 @@ function App() {
                 approvedAt: serverTimestamp()
             });
 
-            console.log("Access code verified successfully");
-
-            // Notify Unity
+            console.log("✅ Code verified");
             sendMessage("RegistrationUITelegram", "OnCodeVerified", "");
 
         } catch (error) {
-            console.error("Error verifying access code:", error);
-            sendMessage("RegistrationUITelegram", "OnCodeVerificationFailedFromReact", `Verification failed: ${error.message}`);
+            console.error("❌ Error verifying code:", error);
+            sendMessage("RegistrationUITelegram", "OnCodeVerificationFailedFromReact", `Failed: ${error.message}`);
         }
     }, [currentUser, sendMessage]);
 
     // Expose functions to Unity
     useEffect(() => {
-        // Make functions globally available for Unity to call
         window.createUsername = createUsernameInFirebase;
         window.verifyAccessCode = verifyAccessCodeInFirebase;
+        console.log("✅ Functions exposed to Unity");
 
         return () => {
             delete window.createUsername;
@@ -313,53 +285,65 @@ function App() {
         };
     }, [createUsernameInFirebase, verifyAccessCodeInFirebase]);
 
-    // Send Telegram data to Unity when game is loaded
+    // Initialize on mount
     useEffect(() => {
-        async function sendTelegramDataToUnity() {
-            if (isLoaded && !telegramDataSent) {
-                const isInTelegram = await isTMA();
+        console.log("🚀 App initializing...");
 
-                if (isInTelegram) {
-                    try {
-                        const initDataObj = initData();
+        // Get Telegram data immediately
+        const tgData = getTelegramUserData();
 
-                        if (initDataObj && initDataObj.user) {
-                            const telegramUser = initDataObj.user;
-
-                            const telegramUserData = {
-                                id: telegramUser.id,
-                                username: telegramUser.username || "",
-                                first_name: telegramUser.firstName || "",
-                                last_name: telegramUser.lastName || "",
-                                photo_url: telegramUser.photoUrl || ""
-                            };
-
-                            console.log("Sending Telegram data to Unity:", telegramUserData);
-
-                            // Send telegram data to Unity first
-                            sendMessage("RegistrationUITelegram", "ReceiveTelegramData", JSON.stringify(telegramUserData));
-
-                            // Store telegram data for later use
-                            setTelegramData(telegramUserData);
-
-                            // Authenticate with Firebase
-                            await authenticateWithFirebase(telegramUserData);
-
-                            setTelegramDataSent(true);
-                        } else {
-                            console.log("No Telegram user data available");
-                        }
-                    } catch (error) {
-                        console.error("Error getting Telegram data:", error);
-                    }
-                } else {
-                    console.log("Not running in Telegram environment");
-                }
-            }
+        if (tgData) {
+            console.log("✅ Telegram data found");
+            setTelegramData(tgData);
+            setStatusMessage("Telegram data received");
+        } else {
+            console.log("⚠️ No Telegram data - using test mode");
+            // Test data for development
+            const testData = {
+                id: 123456789,
+                username: "testuser",
+                first_name: "Test",
+                last_name: "User",
+                photo_url: ""
+            };
+            setTelegramData(testData);
+            setStatusMessage("Test mode");
         }
+    }, [getTelegramUserData]);
 
-        sendTelegramDataToUnity();
-    }, [isLoaded, telegramDataSent, sendMessage, authenticateWithFirebase]);
+    // When Unity loads and we have data, authenticate
+    useEffect(() => {
+        if (isLoaded && telegramData && !currentUser) {
+            console.log("🎮 Unity loaded, starting authentication...");
+
+            // Send Telegram data to Unity first
+            console.log("📤 Sending Telegram data to Unity...");
+            sendMessage("RegistrationUITelegram", "ReceiveTelegramData", JSON.stringify(telegramData));
+
+            // Then authenticate
+            setTimeout(() => {
+                authenticateWithFirebase(telegramData);
+                setReadyToShow(true);
+            }, 500);
+        }
+    }, [isLoaded, telegramData, currentUser, sendMessage, authenticateWithFirebase]);
+
+    // Haptic feedback handlers
+    const handleHapticSoft = useCallback(() => {
+        try {
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+            }
+        } catch (e) {}
+    }, []);
+
+    const handleHapticMedium = useCallback(() => {
+        try {
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
+            }
+        } catch (e) {}
+    }, []);
 
     useEffect(() => {
         addEventListener("HapticSoft", handleHapticSoft);
@@ -371,29 +355,44 @@ function App() {
         };
     }, [addEventListener, removeEventListener, handleHapticSoft, handleHapticMedium]);
 
+    const showGame = isLoaded && readyToShow;
+
     return (
         <Fragment>
-            <div className="center">
-                <Loader />
-                {!isLoaded && (
-                    <div className="loading-overlay">
-                        <div className="loading-spinner"></div>
-                        <p>Loading: {Math.round(loadingProgression * 100)}%</p>
-                    </div>
-                )}
-            </div>
-
-            <Unity
-                style={{
+            {!showGame && (
+                <div style={{
                     width: "100vw",
                     height: "100vh",
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                }}
-                devicePixelRatio={window.devicePixelRatio}
-                unityProvider={unityProvider}
-            />
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    backgroundColor: "#1a1a1a",
+                    color: "white"
+                }}>
+                    <Loader />
+                    <p style={{ marginTop: "20px", fontSize: "18px", textAlign: "center", padding: "0 20px" }}>
+                        {statusMessage}
+                    </p>
+                    <p style={{ marginTop: "10px", fontSize: "14px" }}>
+                        Loading: {Math.round(loadingProgression * 100)}%
+                    </p>
+                </div>
+            )}
+
+            <div style={{ display: showGame ? "block" : "none" }}>
+                <Unity
+                    style={{
+                        width: "100vw",
+                        height: "100vh",
+                        position: "absolute",
+                        top: 0,
+                        left: 0
+                    }}
+                    devicePixelRatio={window.devicePixelRatio}
+                    unityProvider={unityProvider}
+                />
+            </div>
         </Fragment>
     );
 }
