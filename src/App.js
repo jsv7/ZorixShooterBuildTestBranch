@@ -218,7 +218,7 @@ function App() {
             console.log("✅ Username created:", fullUsername);
 
             // Notify Unity
-            sendMessage("RegistrationUITelegram", "OnUsernameCreated", JSON.stringify({
+            sendMessage("TelegramAuthManager", "OnUsernameCreated", JSON.stringify({
                 username: cleanUsername,
                 discriminator: discriminator
             }));
@@ -281,7 +281,7 @@ function App() {
             });
 
             console.log("✅ Code verified");
-            sendMessage("RegistrationUITelegram", "OnCodeVerified", "");
+            sendMessage("TelegramAuthManager", "OnCodeVerified", "");
 
         } catch (error) {
             console.error("❌ Error verifying code:", error);
