@@ -43,10 +43,10 @@ function App() {
     const [statusMessage, setStatusMessage] = useState("Initializing...");
 
     const { unityProvider, sendMessage, addEventListener, removeEventListener, loadingProgression, isLoaded } = useUnityContext({
-        loaderUrl: "Assets/WEBGL.loader.js",
-        dataUrl: "Assets/WEBGL.data.unityweb",
-        frameworkUrl: "Assets/WEBGL.framework.js.unityweb",
-        codeUrl: "Assets/WEBGL.wasm.unityweb",
+        loaderUrl: `${process.env.PUBLIC_URL}/Assets/WEBGL.loader.js`,
+        dataUrl: `${process.env.PUBLIC_URL}/Assets/WEBGL.data.unityweb`,
+        frameworkUrl: `${process.env.PUBLIC_URL}/Assets/WEBGL.framework.js.unityweb`,
+        codeUrl: `${process.env.PUBLIC_URL}/Assets/WEBGL.wasm.unityweb`,
     });
 
     // Get Telegram data directly from window.Telegram
